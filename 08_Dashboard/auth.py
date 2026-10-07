@@ -1,8 +1,14 @@
-"""Lock screen: the dashboard opens only after a login and password.
+"""Lock screen and accounts: the dashboard opens only after a login and password.
 
-The account lives in `.streamlit/secrets.toml` ([auth] section). The password
-is never stored: only a salted PBKDF2-SHA256 hash. Create or change the
-account with
+Every account has a role, and the role decides what its owner may see:
+
+    rahbariyat  university management: everything, including named students
+    dekan       one faculty only (the account names it); named students of it
+    oqituvchi   aggregated indicators only: no named students
+
+Accounts live in `.streamlit/secrets.toml` ([users.<login>] sections). Passwords
+are never stored: only a salted PBKDF2-SHA256 hash. Create, change or list
+accounts with
 
     python 08_Dashboard/set_password.py
 """
@@ -22,41 +28,89 @@ import ui
 SECRETS = config.ROOT / ".streamlit" / "secrets.toml"
 ITERATIONS = 240_000
 MAX_ATTEMPTS, LOCK_SECONDS = 5, 30
+ROLES = ("rahbariyat", "dekan", "oqituvchi")     # the keys of agent_tools.ROLES
+_DUMMY_SALT = "00" * 16                           # hashed against when the login does not exist
 
 
 def hash_password(password: str, salt: str) -> str:
     return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), ITERATIONS).hex()
 
 
-def write_account(username: str, password: str, note: str | None = None):
-    """Save the single dashboard account (replaces the previous one)."""
-    salt = secrets.token_hex(16)
-    lines = ["# Dashboard login. Change it with: python 08_Dashboard/set_password.py"]
-    if note:
-        lines.append(f"# {note}")
-    lines += ["[auth]", f"username = {json.dumps(username)}", f'salt = "{salt}"',
-              f'password_hash = "{hash_password(password, salt)}"', ""]
-    SECRETS.parent.mkdir(exist_ok=True)
-    SECRETS.write_text("\n".join(lines), encoding="utf-8")
-
-
-def _account() -> dict | None:
+# ----------------------------------------------------------------- storage
+def _read() -> dict:
     try:
-        acc = tomllib.loads(SECRETS.read_text(encoding="utf-8"))["auth"]
-        return acc if {"username", "salt", "password_hash"} <= acc.keys() else None
-    except (OSError, KeyError, tomllib.TOMLDecodeError):
-        return None
+        return tomllib.loads(SECRETS.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
 
 
-def check(username: str, password: str) -> bool:
-    acc = _account()
-    if not acc:
-        return False
-    # both comparisons always run, so timing does not reveal which field was wrong
-    user_ok = hmac.compare_digest(username.strip().lower().encode(), acc["username"].lower().encode())
-    pass_ok = hmac.compare_digest(hash_password(password, acc["salt"]), acc["password_hash"])
-    return user_ok and pass_ok
+def _write(doc: dict):
+    """Write the secrets file: flat [section] tables and [users."login"] tables of strings."""
+    out = ["# Dashboard accounts. Manage them with: python 08_Dashboard/set_password.py", ""]
+    for section, table in doc.items():
+        if section == "users":
+            continue
+        out += [f"[{section}]", *(f"{k} = {json.dumps(v, ensure_ascii=False)}" for k, v in table.items()), ""]
+    for login, acc in doc.get("users", {}).items():
+        out += [f"[users.{json.dumps(login, ensure_ascii=False)}]",
+                *(f"{k} = {json.dumps(v, ensure_ascii=False)}" for k, v in acc.items()), ""]
+    SECRETS.parent.mkdir(exist_ok=True)
+    SECRETS.write_text("\n".join(out), encoding="utf-8")
 
+
+def accounts() -> dict:
+    """{login in lower case: account}. An account is a dict with username, role,
+    faculty (dekan only), salt and password_hash."""
+    doc, found = _read(), {}
+    legacy = doc.get("auth")                 # the first version had one account without a role
+    if legacy and {"username", "salt", "password_hash"} <= legacy.keys():
+        found[legacy["username"].lower()] = {**legacy, "role": "rahbariyat"}
+    for login, acc in doc.get("users", {}).items():
+        if {"role", "salt", "password_hash"} <= acc.keys() and acc["role"] in ROLES:
+            found[login.lower()] = {**acc, "username": login}
+    return found
+
+
+def write_account(username: str, password: str, role: str = "rahbariyat", faculty: str | None = None):
+    """Create an account or replace the one with the same login."""
+    if role not in ROLES:
+        raise ValueError(f"Noma'lum rol: {role}")
+    if role == "dekan" and not faculty:
+        raise ValueError("Dekan hisobi uchun fakultet ko'rsatilishi kerak.")
+    doc = _read()
+    users = {a["username"]: {k: v for k, v in a.items() if k != "username"}
+             for a in accounts().values()}                    # also migrates the legacy account
+    doc.pop("auth", None)
+    users = {u: a for u, a in users.items() if u.lower() != username.lower()}
+    salt = secrets.token_hex(16)
+    users[username] = {"role": role, **({"faculty": faculty} if role == "dekan" else {}),
+                       "salt": salt, "password_hash": hash_password(password, salt)}
+    doc["users"] = users
+    _write(doc)
+
+
+def delete_account(username: str) -> bool:
+    doc = _read()
+    users = {a["username"]: {k: v for k, v in a.items() if k != "username"} for a in accounts().values()}
+    kept = {u: a for u, a in users.items() if u.lower() != username.lower()}
+    doc.pop("auth", None)
+    doc["users"] = kept
+    _write(doc)
+    return len(kept) < len(users)
+
+
+def check(username: str, password: str) -> dict | None:
+    """The account if the login and password match, otherwise None."""
+    acc = accounts().get(username.strip().lower())
+    # the hash is always computed, so timing does not reveal whether the login exists
+    digest = hash_password(password, acc["salt"] if acc else _DUMMY_SALT)
+    return acc if acc and hmac.compare_digest(digest, acc["password_hash"]) else None
+
+
+def _sign_in(acc: dict):
+    st.session_state.auth_user = acc["username"]
+    st.session_state.role = acc["role"]
+    st.session_state.own_faculty_name = acc.get("faculty") if acc["role"] == "dekan" else None
 
 
 # What differs between the two themes on the lock screen.
@@ -201,7 +255,7 @@ def _lock_screen():
         unsafe_allow_html=True)
     ui.theme_button(key="lock_theme")
 
-    if _account() is None:
+    if not accounts():
         st.error("Kirish hisobi sozlanmagan. Uni yaratish uchun: `python 08_Dashboard/set_password.py`")
         return
 
@@ -213,8 +267,9 @@ def _lock_screen():
     if wait > 0:
         st.warning(f"Juda ko'p noto'g'ri urinish. {wait} soniyadan keyin qayta urinib ko'ring.")
     elif submitted:
-        if check(username, password):
-            st.session_state.auth_user = username.strip()
+        acc = check(username, password)
+        if acc:
+            _sign_in(acc)
             st.session_state.pop("auth_fails", None)
             st.rerun()
         time.sleep(0.6)                      # slow down guessing
@@ -235,10 +290,12 @@ def require_login():
         st.stop()
 
 
-def sidebar_user():
-    """Who is signed in, the theme switch, and a button that locks the dashboard again."""
-    st.markdown(f'<div class="ui-user"><i></i><span>Kirgan: <b>{st.session_state.auth_user}</b></span></div>',
-                unsafe_allow_html=True)
+def sidebar_user(role_label: str):
+    """Who is signed in and in which role, the theme switch, and a button that locks
+    the dashboard again."""
+    faculty = st.session_state.get("own_faculty_name")
+    st.markdown(f'<div class="ui-user"><i></i><span>Kirgan: <b>{st.session_state.auth_user}</b><br>'
+                f'{role_label}{" · " + faculty if faculty else ""}</span></div>', unsafe_allow_html=True)
     ui.theme_button()
     if st.button("Chiqish", icon=":material/lock:", width="stretch"):
         for key in list(st.session_state.keys()):

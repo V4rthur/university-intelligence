@@ -70,19 +70,23 @@ nav = st.navigation([
 
 st.session_state.semester_label = m.semester_label(data, data["latest"])
 
+# The role comes from the account that signed in (auth.py); nobody can pick another one.
+role = st.session_state.role
+if role == "dekan":
+    own = data["faculties"].loc[
+        data["faculties"].FacultyName == st.session_state.own_faculty_name, "FacultyKey"]
+    if own.empty:        # the account names a faculty the warehouse does not have: open nothing
+        st.error(f"Bu hisobga biriktirilgan fakultet topilmadi: «{st.session_state.own_faculty_name}». "
+                 "Hisobni `python 08_Dashboard/set_password.py` orqali tuzating.")
+        with st.sidebar:
+            auth.sidebar_user(ROLES[role]["label"])
+        st.stop()
+    st.session_state.own_faculty = int(own.iloc[0])
+
 with st.sidebar:
     st.divider()
-    role = st.selectbox("Foydalanuvchi roli", list(ROLES), format_func=lambda r: ROLES[r]["label"],
-                        help="Rolga qarab talaba darajasidagi ma'lumotlar ochiladi yoki yopiladi "
-                             "(role-based access konsepti).")
-    st.session_state.role = role
-    if role == "dekan":
-        name = st.selectbox("Fakultet", list(data["faculties"].FacultyName))
-        st.session_state.own_faculty_name = name
-        st.session_state.own_faculty = int(
-            data["faculties"].loc[data["faculties"].FacultyName == name, "FacultyKey"].iloc[0])
     st.caption(f"Manba: SQL Server · {config.SQL_DATABASE}  \nYangilangan: {version.split('-', 1)[-1]}")
-    auth.sidebar_user()
+    auth.sidebar_user(ROLES[role]["label"])
     ui.watch_for_new_data()
 
 nav.run()

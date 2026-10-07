@@ -94,7 +94,7 @@ def scenarios(d):
 # -------------------------------------------------------------------- 10. agent
 def agent(d):
     ui.header("AI yordamchi", "Savolni oddiy tilda bering - javob ombor va model natijalaridan olinadi")
-    role = st.session_state.get("role", "rahbariyat")
+    role = st.session_state.get("role", "oqituvchi")
     fac_name = st.session_state.get("own_faculty_name") if role == "dekan" else None
     st.caption(f"Rol: **{ROLES[role]['label']}**" + (f" · {fac_name}" if fac_name else "") +
                " · Yordamchi faqat ma'lumotlar ombori, tahlil qatlami, ML modeli va simulyatsiya "
@@ -219,7 +219,7 @@ def data_quality(d):
         "Yangi fayl `01_Data/raw` papkasiga tushganda konveyer faqat yangi yoki o'zgargan fayllarni "
         "o'qiydi, tozalaydi, omborga `MERGE` orqali qo'shadi (takror yuklash dublikat yaratmaydi) va "
         "talabalar xavfini qayta hisoblaydi. Dashboard yangi ma'lumotni 30 soniya ichida o'zi ko'rsatadi.")
-    if st.session_state.get("role", "rahbariyat") != "rahbariyat":
+    if st.session_state.get("role", "oqituvchi") != "rahbariyat":
         return st.caption("Konveyerni ishga tushirish faqat rahbariyat roli uchun ochiq.")
     c1, c2 = st.columns(2)
     run_args = None

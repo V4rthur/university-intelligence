@@ -23,7 +23,7 @@ GRADES_H = 250             # exams page: grades chart and the table beside it
 
 def _scope():
     """(may see named students, faculty restriction) for the selected role."""
-    role = st.session_state.get("role", "rahbariyat")
+    role = st.session_state.get("role", "oqituvchi")
     fk = st.session_state.get("own_faculty") if role == "dekan" else None
     return role != "oqituvchi", fk
 

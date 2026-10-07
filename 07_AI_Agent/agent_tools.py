@@ -165,8 +165,10 @@ TOOLS = [
 
 _FORBIDDEN = re.compile(
     r"\b(insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|"
-    r"backup|restore|shutdown|openrowset|opendatasource|bulk|into|xp_\w+|sp_\w+|dbcc|waitfor)\b",
+    r"backup|restore|shutdown|openrowset|opendatasource|bulk|into|xp_\w+|sp_\w+|dbcc|waitfor|"
+    r"revert|setuser)\b",
     re.IGNORECASE)
+SQL_READER = "uis_agent_reader"      # read-only database user, see 03_SQL/03_agent_reader.sql
 
 
 def _records(df: pd.DataFrame, digits: int = 3) -> list[dict]:
@@ -414,10 +416,29 @@ class Toolbox:
             raise ValueError("Faqat bitta, faqat o'qish uchun SELECT so'roviga ruxsat berilgan.")
         with self.engine.connect() as con:
             con.exec_driver_sql("SET TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCK_TIMEOUT 15000")
-            result = con.execute(text(q))
-            rows = result.fetchmany(config.SQL_TOOL_MAX_ROWS + 1)
-            df = pd.DataFrame(rows, columns=list(result.keys()))
-            con.rollback()
+            # Second lock, inside the database: the query runs as a user that can only SELECT
+            # (03_SQL/03_agent_reader.sql). The cookie is needed to switch back, and the
+            # query cannot see it, so it cannot leave that identity.
+            try:
+                cookie = con.exec_driver_sql(
+                    "SET NOCOUNT ON; DECLARE @c varbinary(8000); "
+                    f"EXECUTE AS USER = '{SQL_READER}' WITH COOKIE INTO @c; SELECT @c").scalar()
+            except Exception as exc:
+                raise RuntimeError(
+                    "Faqat o'qish uchun ma'lumotlar bazasi foydalanuvchisi topilmadi. Sxemani yangilang: "
+                    "`python run_pipeline.py`.") from exc
+            try:
+                result = con.exec_driver_sql(q)
+                rows = result.fetchmany(config.SQL_TOOL_MAX_ROWS + 1)
+                df = pd.DataFrame(rows, columns=list(result.keys()))
+                result.close()
+            finally:                         # also after a refused query: switch back, or drop the connection
+                try:
+                    con.rollback()
+                    con.exec_driver_sql(
+                        f"DECLARE @c varbinary(8000) = 0x{cookie.hex()}; REVERT WITH COOKIE = @c")
+                except Exception:
+                    con.invalidate()         # never hand a half-switched connection back to the pool
         truncated = len(df) > config.SQL_TOOL_MAX_ROWS
         return {"row_count": int(min(len(df), config.SQL_TOOL_MAX_ROWS)), "truncated": truncated,
                 "rows": _records(df.head(config.SQL_TOOL_MAX_ROWS))}

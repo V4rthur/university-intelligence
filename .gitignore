@@ -13,6 +13,7 @@ __pycache__/
 # Secrets and per-machine state: dashboard accounts, session key, theme choice
 .streamlit/secrets.toml
 .streamlit/demo_accounts.txt
+.streamlit/tunnel.log
 
 # Reports written by the AI agent, and the pre-git copy of the old dashboard theme
 10_Documentation/reports/

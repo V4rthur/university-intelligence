@@ -1,0 +1,6 @@
+# Keep files byte-for-byte as they are on disk; never convert line endings.
+* -text
+*.pdf binary
+*.pptx binary
+*.png binary
+*.joblib binary

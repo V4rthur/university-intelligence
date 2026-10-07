@@ -1,0 +1,271 @@
+{
+  "best_model": "Random Forest",
+  "threshold": 0.36357794123217,
+  "target_recall": 0.8,
+  "results": [
+    {
+      "Model": "Logistic Regression",
+      "Split": "validation",
+      "Rule": "recall target",
+      "Threshold": 0.349,
+      "Accuracy": 0.9007,
+      "Precision": 0.7013,
+      "Recall": 0.8003,
+      "F1": 0.7476,
+      "ROC_AUC": 0.9494,
+      "TN": 5875,
+      "FP": 488,
+      "FN": 286,
+      "TP": 1146,
+      "IsBest": 0
+    },
+    {
+      "Model": "Logistic Regression",
+      "Split": "test",
+      "Rule": "default 0.5",
+      "Threshold": 0.5,
+      "Accuracy": 0.9059,
+      "Precision": 0.7726,
+      "Recall": 0.6965,
+      "F1": 0.7326,
+      "ROC_AUC": 0.9454,
+      "TN": 8175,
+      "FP": 399,
+      "FN": 591,
+      "TP": 1356,
+      "IsBest": 0
+    },
+    {
+      "Model": "Logistic Regression",
+      "Split": "test",
+      "Rule": "recall target",
+      "Threshold": 0.349,
+      "Accuracy": 0.8982,
+      "Precision": 0.6987,
+      "Recall": 0.791,
+      "F1": 0.742,
+      "ROC_AUC": 0.9454,
+      "TN": 7910,
+      "FP": 664,
+      "FN": 407,
+      "TP": 1540,
+      "IsBest": 0
+    },
+    {
+      "Model": "Decision Tree",
+      "Split": "validation",
+      "Rule": "recall target",
+      "Threshold": 0.373,
+      "Accuracy": 0.8967,
+      "Precision": 0.6832,
+      "Recall": 0.8163,
+      "F1": 0.7439,
+      "ROC_AUC": 0.9447,
+      "TN": 5821,
+      "FP": 542,
+      "FN": 263,
+      "TP": 1169,
+      "IsBest": 0
+    },
+    {
+      "Model": "Decision Tree",
+      "Split": "test",
+      "Rule": "default 0.5",
+      "Threshold": 0.5,
+      "Accuracy": 0.9027,
+      "Precision": 0.7799,
+      "Recall": 0.6605,
+      "F1": 0.7152,
+      "ROC_AUC": 0.9374,
+      "TN": 8211,
+      "FP": 363,
+      "FN": 661,
+      "TP": 1286,
+      "IsBest": 0
+    },
+    {
+      "Model": "Decision Tree",
+      "Split": "test",
+      "Rule": "recall target",
+      "Threshold": 0.373,
+      "Accuracy": 0.8924,
+      "Precision": 0.6845,
+      "Recall": 0.7766,
+      "F1": 0.7276,
+      "ROC_AUC": 0.9374,
+      "TN": 7877,
+      "FP": 697,
+      "FN": 435,
+      "TP": 1512,
+      "IsBest": 0
+    },
+    {
+      "Model": "Random Forest",
+      "Split": "validation",
+      "Rule": "recall target",
+      "Threshold": 0.364,
+      "Accuracy": 0.901,
+      "Precision": 0.7022,
+      "Recall": 0.8003,
+      "F1": 0.748,
+      "ROC_AUC": 0.95,
+      "TN": 5877,
+      "FP": 486,
+      "FN": 286,
+      "TP": 1146,
+      "IsBest": 1
+    },
+    {
+      "Model": "Random Forest",
+      "Split": "test",
+      "Rule": "default 0.5",
+      "Threshold": 0.5,
+      "Accuracy": 0.9042,
+      "Precision": 0.7731,
+      "Recall": 0.6826,
+      "F1": 0.725,
+      "ROC_AUC": 0.9428,
+      "TN": 8184,
+      "FP": 390,
+      "FN": 618,
+      "TP": 1329,
+      "IsBest": 1
+    },
+    {
+      "Model": "Random Forest",
+      "Split": "test",
+      "Rule": "recall target",
+      "Threshold": 0.364,
+      "Accuracy": 0.8966,
+      "Precision": 0.6953,
+      "Recall": 0.7853,
+      "F1": 0.7376,
+      "ROC_AUC": 0.9428,
+      "TN": 7904,
+      "FP": 670,
+      "FN": 418,
+      "TP": 1529,
+      "IsBest": 1
+    },
+    {
+      "Model": "Gradient Boosting",
+      "Split": "validation",
+      "Rule": "recall target",
+      "Threshold": 0.325,
+      "Accuracy": 0.8996,
+      "Precision": 0.6973,
+      "Recall": 0.801,
+      "F1": 0.7455,
+      "ROC_AUC": 0.9483,
+      "TN": 5865,
+      "FP": 498,
+      "FN": 285,
+      "TP": 1147,
+      "IsBest": 0
+    },
+    {
+      "Model": "Gradient Boosting",
+      "Split": "test",
+      "Rule": "default 0.5",
+      "Threshold": 0.5,
+      "Accuracy": 0.9056,
+      "Precision": 0.7783,
+      "Recall": 0.6852,
+      "F1": 0.7288,
+      "ROC_AUC": 0.9438,
+      "TN": 8194,
+      "FP": 380,
+      "FN": 613,
+      "TP": 1334,
+      "IsBest": 0
+    },
+    {
+      "Model": "Gradient Boosting",
+      "Split": "test",
+      "Rule": "recall target",
+      "Threshold": 0.325,
+      "Accuracy": 0.8957,
+      "Precision": 0.6882,
+      "Recall": 0.7982,
+      "F1": 0.7391,
+      "ROC_AUC": 0.9438,
+      "TN": 7870,
+      "FP": 704,
+      "FN": 393,
+      "TP": 1554,
+      "IsBest": 0
+    }
+  ],
+  "importance": [
+    {
+      "Feature": "CumGPA",
+      "Label": "Umumiy GPA",
+      "Importance": 0.03667
+    },
+    {
+      "Feature": "PrevGPA",
+      "Label": "Oldingi semestr GPA",
+      "Importance": 0.00907
+    },
+    {
+      "Feature": "SemGPA",
+      "Label": "Joriy semestr GPA",
+      "Importance": 0.00907
+    },
+    {
+      "Feature": "AvgAssignmentScore",
+      "Label": "Topshiriq bali",
+      "Importance": 0.00851
+    },
+    {
+      "Feature": "AttendanceRate",
+      "Label": "Davomat",
+      "Importance": 0.00297
+    },
+    {
+      "Feature": "FailedCourses",
+      "Label": "Yiqilgan fanlar (semestr)",
+      "Importance": 0.00145
+    },
+    {
+      "Feature": "StudySemester",
+      "Label": "O'qish semestri",
+      "Importance": 0.00134
+    },
+    {
+      "Feature": "Credits",
+      "Label": "Kredit yuklamasi",
+      "Importance": 0.00089
+    },
+    {
+      "Feature": "SubmissionRate",
+      "Label": "Topshiriq topshirish ulushi",
+      "Importance": 0.00051
+    },
+    {
+      "Feature": "CumFailedCourses",
+      "Label": "Yiqilgan fanlar (jami)",
+      "Importance": 0.00047
+    },
+    {
+      "Feature": "GPATrend",
+      "Label": "GPA o'zgarishi",
+      "Importance": 0.00027
+    },
+    {
+      "Feature": "WarningsCum",
+      "Label": "Ogohlantirishlar soni",
+      "Importance": 5e-05
+    },
+    {
+      "Feature": "DebtRatio",
+      "Label": "To'lov qarzi ulushi",
+      "Importance": 1e-05
+    },
+    {
+      "Feature": "AvgTeacherLoad",
+      "Label": "O'qituvchi yuklamasi",
+      "Importance": -6e-05
+    }
+  ]
+}

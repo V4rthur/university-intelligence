@@ -1,0 +1,30 @@
+# Deep-space theme: navy night sky, glass panels, blue glow and one teal
+# accent. Layout, motion and chart rules are in 08_Dashboard/ui.py.
+[theme]
+base = "dark"
+primaryColor = "#4f8cff"
+backgroundColor = "#070b1a"
+secondaryBackgroundColor = "#111a36"
+textColor = "#eef2ff"
+borderColor = "#26335c"
+baseRadius = "0.8rem"
+buttonRadius = "full"
+font = "'Century Gothic', Questrial, sans-serif"
+showWidgetBorder = true
+
+[theme.sidebar]
+backgroundColor = "#080d20"
+secondaryBackgroundColor = "#111a36"
+textColor = "#eef2ff"
+borderColor = "#26335c"
+primaryColor = "#4f8cff"
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+headless = true
+port = 8610
+
+[browser]
+gatherUsageStats = false

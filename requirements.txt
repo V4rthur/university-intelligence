@@ -1,0 +1,12 @@
+pandas>=3.0
+numpy>=2.0
+scikit-learn>=1.9
+SQLAlchemy>=2.0
+pyodbc>=5.0
+streamlit>=1.65
+plotly>=6.0
+openpyxl>=3.1
+joblib>=1.4
+anthropic>=1.11
+python-pptx>=1.0
+reportlab>=4.0

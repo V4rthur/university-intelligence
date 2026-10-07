@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated data and models: rebuilt by `python 01_Data/generate_data.py --reset`
+# and `python run_pipeline.py --rebuild` (164 MB of CSV, 28 MB model).
+01_Data/raw/
+01_Data/_state/
+06_ML/models/*.joblib
+
+# Secrets and per-machine state: dashboard accounts, session key, theme choice
+.streamlit/secrets.toml
+.streamlit/demo_accounts.txt
+.streamlit/ui_theme.txt
+
+# Reports written by the AI agent, and the pre-git copy of the old dashboard theme
+10_Documentation/reports/
+08_Dashboard/_backup_swiss_theme/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

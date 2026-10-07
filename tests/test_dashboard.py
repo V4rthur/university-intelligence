@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "08_Dashboard"))
-import config  # noqa: E402,F401
+import config  # noqa: E402
 import agent_tools as at  # noqa: E402
 import auth  # noqa: E402
 import ui  # noqa: E402
@@ -20,9 +20,10 @@ class Accounts(unittest.TestCase):
     def setUp(self):
         self._dir = tempfile.TemporaryDirectory()
         self._real, auth.SECRETS = auth.SECRETS, Path(self._dir.name) / "secrets.toml"
+        self._offline, config.OFFLINE = config.OFFLINE, False
 
     def tearDown(self):
-        auth.SECRETS = self._real
+        auth.SECRETS, config.OFFLINE = self._real, self._offline
         self._dir.cleanup()
 
     def test_no_file_means_no_accounts_and_no_login(self):
@@ -90,11 +91,12 @@ class SessionTokens(unittest.TestCase):
     def setUp(self):
         self._dir = tempfile.TemporaryDirectory()
         self._real, auth.SECRETS = auth.SECRETS, Path(self._dir.name) / "secrets.toml"
+        self._offline, config.OFFLINE = config.OFFLINE, False
         auth.write_account("rektor", "correct horse", "rahbariyat")
         self.acc = auth.check("rektor", "correct horse")
 
     def tearDown(self):
-        auth.SECRETS = self._real
+        auth.SECRETS, config.OFFLINE = self._real, self._offline
         self._dir.cleanup()
 
     def test_a_fresh_token_brings_the_account_back(self):
@@ -217,6 +219,12 @@ class _NoDatabase(at.Toolbox):
 
 
 class SqlToolFilter(unittest.TestCase):
+    def setUp(self):
+        self._offline, config.OFFLINE = config.OFFLINE, False
+
+    def tearDown(self):
+        config.OFFLINE = self._offline
+
     def refuse(self, query):
         with self.assertRaises(ValueError, msg=query):
             _NoDatabase().sql_query(query)
@@ -242,6 +250,46 @@ class SqlToolFilter(unittest.TestCase):
 
     def test_role_table_matches_the_dashboard_accounts(self):
         self.assertEqual(set(at.ROLES), set(auth.ROLES))
+
+
+@unittest.skipUnless((config.OFFLINE_DIR / "meta.json").exists(), "offline nusxa eksport qilinmagan")
+class OfflineCopy(unittest.TestCase):
+    """The hosted demo: reads the saved export, never the database, and writes nothing."""
+
+    def setUp(self):
+        self._offline, config.OFFLINE = config.OFFLINE, True
+
+    def tearDown(self):
+        config.OFFLINE = self._offline
+
+    def test_everything_loads_without_an_engine(self):
+        import metrics as m
+        d = m.load_all(None)
+        self.assertGreater(m.kpis(d)["total_students"], 0)
+        self.assertTrue(0 <= m.university_health(d)[0] <= 100)
+        student = int(d["risk"].StudentKey.iloc[0])
+        profile = m.student_profile(d, None, student)
+        self.assertGreater(len(profile["grades"]), 0)
+        self.assertNotIn("StudentKey", profile["grades"].columns)
+        self.assertIsNotNone(m.data_quality(None)["score"])
+        self.assertTrue(m.data_version(None))
+
+    def test_a_loaded_table_can_be_changed_without_touching_the_copy(self):
+        import offline
+        first = offline.table("all_faculties")
+        first["FacultyName"] = "x"
+        self.assertNotIn("x", set(offline.table("all_faculties").FacultyName))
+
+    def test_nothing_can_be_written_or_queried(self):
+        import interventions as iv
+        with self.assertRaises(PermissionError):
+            iv.add(None, 1, 1, iv.TYPES[0], "", "tester")
+        with self.assertRaises(PermissionError):
+            iv.update(None, 1, iv.STATUSES[0], None, "tester")
+        self.assertEqual(len(iv.for_student(None, 1)), 0)
+        self.assertEqual(len(iv.latest_by_student(None)), 0)
+        with self.assertRaises(PermissionError):
+            _NoDatabase().sql_query("SELECT 1")
 
 
 if __name__ == "__main__":

@@ -18,7 +18,13 @@ _COLUMNS = ["StudentKey", "SemesterKey", "Type", "Status", "Outcome", "Note", "C
             "UpdatedBy", "UpdatedAt"]
 
 
+def _writable():
+    if config.OFFLINE:
+        raise PermissionError("Namoyish nusxasida choralar saqlanmaydi.")
+
+
 def add(engine, student_key: int, semester_key: int, kind: str, note: str, user: str) -> None:
+    _writable()
     if kind not in TYPES:
         raise ValueError(f"Noma'lum chora turi: {kind}")
     with engine.begin() as con:
@@ -30,6 +36,7 @@ def add(engine, student_key: int, semester_key: int, kind: str, note: str, user:
 
 
 def update(engine, intervention_id: int, status: str, outcome: str | None, user: str) -> None:
+    _writable()
     if status not in STATUSES or (outcome and outcome not in OUTCOMES):
         raise ValueError("Noto'g'ri holat yoki natija.")
     with engine.begin() as con:
@@ -41,6 +48,9 @@ def update(engine, intervention_id: int, status: str, outcome: str | None, user:
 
 def for_student(engine, student_key: int) -> pd.DataFrame:
     """Every record of one student, newest first."""
+    if config.OFFLINE:
+        return pd.DataFrame(columns=["InterventionID", "CreatedAt", "Type", "Status", "Outcome", "Note",
+                                     "CreatedBy"])
     return pd.read_sql(text(
         "SELECT InterventionID, CreatedAt, Type, Status, Outcome, Note, CreatedBy "
         "FROM app.Intervention WHERE StudentKey = :s ORDER BY CreatedAt DESC, InterventionID DESC"),
@@ -49,6 +59,8 @@ def for_student(engine, student_key: int) -> pd.DataFrame:
 
 def latest_by_student(engine) -> pd.DataFrame:
     """One row per student that has any record: its newest status and the number of records."""
+    if config.OFFLINE:
+        return pd.DataFrame(columns=["StudentKey", "Status", "Records"])
     return pd.read_sql(text(
         "SELECT StudentKey, Status, Records FROM ("
         "  SELECT StudentKey, Status, COUNT(*) OVER (PARTITION BY StudentKey) AS Records,"

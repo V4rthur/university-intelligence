@@ -35,7 +35,8 @@ st.logo(str(ASSETS / ui.LOGO), size="large", icon_image=str(ASSETS / ui.SEAL))
 try:
     data, version = ui.get_data()
 except Exception as exc:  # database missing or SQL Server not reachable
-    st.error("Ma'lumotlar omboriga ulanib bo'lmadi. Avval konveyerni ishga tushiring: "
+    st.error("Saqlangan ma'lumot nusxasi topilmadi: `python 05_Analytics/offline.py`" if config.OFFLINE else
+             "Ma'lumotlar omboriga ulanib bo'lmadi. Avval konveyerni ishga tushiring: "
              "`python run_pipeline.py --rebuild`")
     st.exception(exc)
     st.stop()
@@ -85,7 +86,11 @@ if role == "dekan":
 
 with st.sidebar:
     st.divider()
-    st.caption(f"Manba: SQL Server · {config.SQL_DATABASE}  \nYangilangan: {version.split('-', 1)[-1]}")
+    if config.OFFLINE:
+        import offline
+        st.caption(f"Namoyish nusxasi · saqlangan ma'lumot  \nSana: {offline.meta()['exported_at']}")
+    else:
+        st.caption(f"Manba: SQL Server · {config.SQL_DATABASE}  \nYangilangan: {version.split('-', 1)[-1]}")
     auth.sidebar_user(ROLES[role]["label"])
     ui.watch_for_new_data()
 

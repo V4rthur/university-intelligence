@@ -43,7 +43,6 @@ toolbarMode = "minimal"
 
 [server]
 headless = true
-port = 8610
 
 [browser]
 gatherUsageStats = false

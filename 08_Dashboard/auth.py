@@ -41,8 +41,16 @@ def hash_password(password: str, salt: str) -> str:
 def _read() -> dict:
     try:
         return tomllib.loads(SECRETS.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
+    except tomllib.TOMLDecodeError:
         return {}
+    except OSError:
+        pass
+    if config.OFFLINE:           # hosted demo: the accounts are pasted into the host's Secrets box
+        try:
+            return st.secrets.to_dict()
+        except Exception:
+            return {}
+    return {}
 
 
 def _write(doc: dict):
@@ -121,15 +129,19 @@ def _sign_in(acc: dict):
 # password hash, so changing a password (or deleting the account) ends its
 # sessions. The role is not in the token: it is read from the account each time.
 COOKIE, SESSION_HOURS = "uis_session", 12
+_memory_key: dict = {}
 
 
 def _session_key() -> bytes:
     doc = _read()
-    key = doc.get("session", {}).get("key")
+    key = doc.get("session", {}).get("key") or _memory_key.get("key")
     if not key:
         key = secrets.token_hex(32)
         doc.setdefault("session", {})["key"] = key
-        _write(doc)
+        try:
+            _write(doc)
+        except OSError:          # read-only host: keep it for as long as this server process lives
+            _memory_key["key"] = key
     return bytes.fromhex(key)
 
 

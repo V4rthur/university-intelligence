@@ -102,6 +102,24 @@ Xavf ostidagi talaba uchun ko'rilgan choralar (suhbat, tyutorlik, ...) va ularni
 `app.Intervention` jadvaliga yoziladi. Bu - fayllardan qayta tiklab bo'lmaydigan yagona ma'lumot,
 shuning uchun `--rebuild` uni avval faylga saqlab, qayta qurilgach tiklaydi.
 
+### Internetda ulashish
+
+- **Vaqtincha havola** (kompyuter yoniq bo'lganda): avval `start_dashboard.bat`, so'ng
+  `share_dashboard.bat` - u `https://....trycloudflare.com` manzilini chiqaradi.
+- **Doimiy namoyish** (kompyuter o'chiq bo'lsa ham ishlaydi): Streamlit Community Cloud'da.
+  U yerdan SQL Server ko'rinmaydi, shuning uchun dashboard *oflayn nusxa* rejimida ishlaydi:
+  omborning saqlangan nusxasini (`01_Data/offline`, Parquet) o'qiydi. Barcha sahifalar ishlaydi;
+  konveyerni ishga tushirish, erkin SQL va choralarni saqlash u yerda o'chirilgan.
+
+  ```bash
+  .venv\Scripts\python 05_Analytics\offline.py      # nusxani yangilash, so'ng commit va push
+  ```
+
+  Joylashtirish: repozitoriy GitHub'da bo'lishi kerak; share.streamlit.io'da yangi ilova,
+  asosiy fayl `08_Dashboard/app.py`; *Secrets* maydoniga `.streamlit/secrets.toml` mazmuni
+  ko'chiriladi (hisoblar shu yerdan o'qiladi). Linux'da oflayn rejim o'zi yoqiladi; Windows'da
+  sinab ko'rish uchun `UIS_OFFLINE=1` o'rnating.
+
 SQL Server boshqa nomda bo'lsa: `UIS_SQL_SERVER` muhit o'zgaruvchisini o'rnating
 (masalan `localhost\SQLEXPRESS`).
 
@@ -157,7 +175,7 @@ vaznlari bitta joyda.
 ## Tekshirish
 
 ```bash
-.venv\Scripts\python -m unittest discover tests     # 54 ta unit test, bir necha soniya
+.venv\Scripts\python -m unittest discover tests     # 57 ta unit test, bir necha soniya
 .venv\Scripts\python tests\smoke_agent.py           # AI agent vositalari, jonli ombor bilan
 ```
 

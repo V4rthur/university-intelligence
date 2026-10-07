@@ -357,6 +357,9 @@ def _model_trust(d):
 def _interventions(d, row, user):
     """What has been done for the selected student, and a form to record more."""
     st.markdown("**Ko'rilgan choralar**")
+    if config.OFFLINE:
+        return st.caption("Bu - namoyish nusxasi: choralar bu yerda saqlanmaydi. To'liq tizimda shu joyda "
+                          "talaba uchun ko'rilgan choralar qayd etiladi va ularning natijasi kuzatiladi.")
     engine, key = ui.engine(), int(row.StudentKey)
     done = iv.for_student(engine, key)
     if len(done):

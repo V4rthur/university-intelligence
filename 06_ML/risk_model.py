@@ -56,9 +56,13 @@ GROUP_COLUMNS = {"GPA": "F_GPA", "Davomat": "F_Attendance", "Yiqilgan fanlar": "
 
 
 def load_snapshot(engine) -> pd.DataFrame:
-    df = pd.read_sql(text(
-        "SELECT ss.*, s.Status FROM dw.FactStudentSemester ss "
-        "JOIN dw.DimStudent s ON s.StudentKey = ss.StudentKey"), engine)
+    if config.OFFLINE:
+        import offline
+        df = offline.table("ml_snapshot")
+    else:
+        df = pd.read_sql(text(
+            "SELECT ss.*, s.Status FROM dw.FactStudentSemester ss "
+            "JOIN dw.DimStudent s ON s.StudentKey = ss.StudentKey"), engine)
     num = [c for c in df.columns if c not in ("Status",)]
     df[num] = df[num].apply(pd.to_numeric)
     return add_features(df)

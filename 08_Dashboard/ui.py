@@ -398,7 +398,8 @@ def header(title: str, subtitle: str | None = None, chip: bool = True):
 # --------------------------------------------------------------------- data
 @st.cache_resource
 def engine():
-    return config.get_engine()
+    """The warehouse connection; None in the offline copy, where nothing queries it."""
+    return None if config.OFFLINE else config.get_engine()
 
 
 @st.cache_data(show_spinner="Ma'lumotlar ombordan yuklanmoqda...", max_entries=2)

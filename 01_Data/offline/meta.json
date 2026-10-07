@@ -1,0 +1,49 @@
+{
+ "exported_at": "2026-10-07 15:23",
+ "version": "5-2026-10-07 00:17:42",
+ "frames": [
+  "semesters",
+  "faculties",
+  "departments",
+  "teachers",
+  "courses",
+  "students",
+  "snap",
+  "course_sem",
+  "exam_group",
+  "exam_dist",
+  "payments",
+  "payments_month",
+  "student_debt",
+  "risk",
+  "model_metrics",
+  "feature_importance"
+ ],
+ "scalars": {
+  "latest": 8
+ },
+ "rows": {
+  "all_semesters": 9,
+  "all_faculties": 6,
+  "all_departments": 18,
+  "all_teachers": 132,
+  "all_courses": 160,
+  "all_students": 13780,
+  "all_snap": 62940,
+  "all_course_sem": 1874,
+  "all_exam_group": 2525,
+  "all_exam_dist": 2683,
+  "all_payments": 54,
+  "all_payments_month": 45,
+  "all_student_debt": 10480,
+  "all_risk": 10681,
+  "all_model_metrics": 12,
+  "all_feature_importance": 14,
+  "grades": 314513,
+  "warnings": 23059,
+  "etl_files": 17,
+  "etl_checks": 41,
+  "etl_runs": 5,
+  "ml_snapshot": 62940
+ }
+}

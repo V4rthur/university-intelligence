@@ -410,6 +410,8 @@ class Toolbox:
     def sql_query(self, query: str) -> dict:
         if not self.perm["sql"]:
             raise PermissionError("Bu rol uchun erkin SQL so'rovlari yopiq.")
+        if config.OFFLINE:
+            raise PermissionError("Namoyish nusxasi ma'lumotlar bazasiga ulanmagan: erkin SQL mavjud emas.")
         q = query.strip().rstrip(";").strip()
         if ";" in q or not re.match(r"(?is)^\s*(select|with)\b", q) or _FORBIDDEN.search(q) \
                 or "--" in q or "/*" in q:

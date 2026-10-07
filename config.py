@@ -38,6 +38,14 @@ SQL_DATABASE = os.environ.get("UIS_SQL_DATABASE", "UniversityIntelligence")
 SQL_DRIVER = os.environ.get("UIS_SQL_DRIVER", "ODBC Driver 17 for SQL Server")
 
 
+# Offline copy. Where SQL Server cannot be reached (the hosted demo runs on Linux), the
+# dashboard reads a saved export of the warehouse instead: see 05_Analytics/offline.py.
+# UIS_OFFLINE=1 forces it (to try it on this machine), UIS_OFFLINE=0 forbids it.
+_offline = os.environ.get("UIS_OFFLINE", "auto")
+OFFLINE = _offline == "1" or (_offline == "auto" and sys.platform != "win32")
+OFFLINE_DIR = DATA_DIR / "offline"
+
+
 def connection_url(database: str | None = None) -> str:
     db = database or SQL_DATABASE
     return (

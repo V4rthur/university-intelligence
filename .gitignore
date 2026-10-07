@@ -8,7 +8,7 @@ __pycache__/
 # and `python run_pipeline.py --rebuild` (164 MB of CSV, 28 MB model).
 01_Data/raw/
 01_Data/_state/
-06_ML/models/*.joblib
+# (the trained model, 28 MB, is committed: the hosted demo needs it for the what-if page)
 
 # Secrets and per-machine state: dashboard accounts, session key, theme choice
 .streamlit/secrets.toml

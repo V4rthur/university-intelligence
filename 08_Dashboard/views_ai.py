@@ -219,6 +219,9 @@ def data_quality(d):
         "Yangi fayl `01_Data/raw` papkasiga tushganda konveyer faqat yangi yoki o'zgargan fayllarni "
         "o'qiydi, tozalaydi, omborga `MERGE` orqali qo'shadi (takror yuklash dublikat yaratmaydi) va "
         "talabalar xavfini qayta hisoblaydi. Dashboard yangi ma'lumotni 30 soniya ichida o'zi ko'rsatadi.")
+    if config.OFFLINE:
+        return st.caption("Bu - namoyish nusxasi: u saqlangan ma'lumot nusxasini ko'rsatadi, konveyer bu "
+                          "yerdan ishga tushirilmaydi.")
     if st.session_state.get("role", "oqituvchi") != "rahbariyat":
         return st.caption("Konveyerni ishga tushirish faqat rahbariyat roli uchun ochiq.")
     c1, c2 = st.columns(2)

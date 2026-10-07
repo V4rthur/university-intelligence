@@ -20,6 +20,7 @@ from sqlalchemy import text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config  # noqa: E402
+import offline  # noqa: E402
 
 HIGH_RISK = ("Yuqori", "Kritik")
 
@@ -27,6 +28,8 @@ HIGH_RISK = ("Yuqori", "Kritik")
 # ------------------------------------------------------------------ loading
 def data_version(engine) -> str:
     """Changes whenever the ETL or the ML scoring has produced new data."""
+    if config.OFFLINE:
+        return offline.meta()["version"]
     with engine.connect() as con:
         run = con.execute(text(
             "SELECT MAX(RunID) FROM etl.RunLog WHERE Status = N'SUCCESS'")).scalar()
@@ -41,6 +44,8 @@ def _q(engine, sql: str) -> pd.DataFrame:
 
 
 def load_all(engine) -> dict:
+    if config.OFFLINE:
+        return offline.load_all()
     d = {}
     d["semesters"] = _q(engine, """
         SELECT SemesterKey, AcademicYear, SemesterName, SemesterLabel, StartDate, EndDate
@@ -461,6 +466,11 @@ def student_profile(d: dict, engine, student_key: int) -> dict | None:
             .merge(d["departments"][["DepartmentKey", "DepartmentName"]], on="DepartmentKey").iloc[0])
     history = d["snap"][d["snap"].StudentKey == student_key].merge(
         d["semesters"][["SemesterKey", "SemesterLabel"]], on="SemesterKey").sort_values("SemesterKey")
+    risk = d["risk"][d["risk"].StudentKey == student_key]
+    if config.OFFLINE:
+        return {"info": info, "history": history, "grades": offline.for_student("grades", student_key),
+                "warnings": offline.for_student("warnings", student_key),
+                "risk": risk.iloc[0] if len(risk) else None}
     grades = pd.read_sql(text("""
         SELECT s.SemesterLabel, c.CourseName, t.TeacherName, g.CurrentScore, g.MidtermScore,
                g.FinalScore, g.TotalScore, g.FinalGrade, g.AttendanceScore,
@@ -475,7 +485,6 @@ def student_profile(d: dict, engine, student_key: int) -> dict | None:
         SELECT d.[Date] AS WarningDate, w.WarningType, w.Severity FROM dw.FactWarnings w
         JOIN dw.DimDate d ON d.DateKey = w.DateKey WHERE w.StudentKey = :k ORDER BY 1"""),
         engine, params={"k": int(student_key)})
-    risk = d["risk"][d["risk"].StudentKey == student_key]
     return {"info": info, "history": history, "grades": grades, "warnings": warnings,
             "risk": risk.iloc[0] if len(risk) else None}
 
@@ -629,9 +638,12 @@ def anomalies(d: dict) -> pd.DataFrame:
 
 # ------------------------------------------------------------- data quality
 def data_quality(engine) -> dict:
-    files = _q(engine, "SELECT * FROM etl.FileLog ORDER BY ProcessedAt DESC")
-    checks = _q(engine, "SELECT * FROM etl.DataQualityLog")
-    runs = _q(engine, "SELECT TOP 20 * FROM etl.RunLog ORDER BY RunID DESC")
+    if config.OFFLINE:
+        files, checks, runs = (offline.table(t) for t in ("etl_files", "etl_checks", "etl_runs"))
+    else:
+        files = _q(engine, "SELECT * FROM etl.FileLog ORDER BY ProcessedAt DESC")
+        checks = _q(engine, "SELECT * FROM etl.DataQualityLog")
+        runs = _q(engine, "SELECT TOP 20 * FROM etl.RunLog ORDER BY RunID DESC")
     rows = float(files["RowsRead"].sum())
     by_check = checks.groupby(["CheckName", "Action"])["IssueCount"].sum().reset_index()
     # FLAGGED rows are informational and usually also counted by a REJECTED rule

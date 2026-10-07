@@ -53,6 +53,25 @@ def _read() -> dict:
     return {}
 
 
+def why_no_accounts() -> str:
+    """What to tell the person setting the dashboard up when the lock screen finds no account."""
+    if not config.OFFLINE:
+        return "Kirish hisobi sozlanmagan. Uni yaratish uchun: `python 08_Dashboard/set_password.py`"
+    try:
+        found = st.secrets.to_dict()
+    except Exception as exc:     # no secrets at all, or text that is not valid TOML
+        found, problem = {}, f"Secrets o'qilmadi ({type(exc).__name__})."
+    else:
+        users = found.get("users", {})
+        problem = ("Secrets bo'sh." if not found else
+                   "Secrets ichida `[users...]` bo'limlari yo'q." if not users else
+                   f"Secrets ichida {len(users)} ta hisob bor, lekin ularda `role`, `salt` yoki "
+                   "`password_hash` yetishmaydi.")
+    return (f"Kirish hisoblari topilmadi. {problem} Streamlit Cloud'da: ilova → **Settings → Secrets** "
+            "maydoniga kompyuteringizdagi `.streamlit/secrets.toml` faylining to'liq mazmunini qo'ying, "
+            "**Save** bosing va ilovani qayta yuklang.")
+
+
 def _write(doc: dict):
     """Write the secrets file: flat [section] tables and [users."login"] tables of strings."""
     out = ["# Dashboard accounts. Manage them with: python 08_Dashboard/set_password.py", ""]
@@ -323,7 +342,7 @@ def _lock_screen():
     ui.theme_button(key="lock_theme")
 
     if not accounts():
-        st.error("Kirish hisobi sozlanmagan. Uni yaratish uchun: `python 08_Dashboard/set_password.py`")
+        st.error(why_no_accounts())
         return
 
     wait = int(st.session_state.get("auth_locked_until", 0) - time.time())

@@ -34,6 +34,7 @@ from sqlalchemy import text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config  # noqa: E402
+import interventions  # noqa: E402
 import reference_uz as ref  # noqa: E402
 
 FACT_DATES = ("2022-01-01", "2033-08-31")   # range covered by dw.DimDate
@@ -139,8 +140,17 @@ def ensure_database() -> None:
 
 
 def drop_database() -> None:
-    """Remove this project's own database so it can be rebuilt from the raw files."""
+    """Remove this project's own database so it can be rebuilt from the raw files.
+
+    Staff records of interventions are the one thing the raw files cannot bring
+    back, so they are saved first and restored by run() after the rebuild."""
     eng = config.get_engine("master")
+    with eng.connect() as con:
+        exists = con.execute(text(f"SELECT DB_ID('{config.SQL_DATABASE}')")).scalar() is not None
+    if exists:
+        saved = interventions.backup(config.get_engine())
+        if saved:
+            log(f"saved {saved} intervention record(s) to {interventions.BACKUP.name}")
     with eng.connect().execution_options(isolation_level="AUTOCOMMIT") as con:
         con.execute(text(
             f"IF DB_ID('{config.SQL_DATABASE}') IS NOT NULL BEGIN "
@@ -368,6 +378,9 @@ def run(full: bool = False) -> dict:
     ensure_database()
     engine = config.get_engine()
     deploy_schema(engine)
+    restored = interventions.restore(engine)
+    if restored:
+        log(f"restored {restored} intervention record(s) after the rebuild")
 
     with engine.begin() as con:
         run_id = con.execute(text(

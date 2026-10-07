@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import config
+import interventions as iv
 import metrics as m
 import risk_model as rm
 import ui
@@ -18,6 +19,7 @@ from report_pdf import build_pdf
 MX = config.SCORE_MAX
 PCT = st.column_config.NumberColumn
 NOT_ADMITTED = "Qo'yilmagan"
+NO_ACTION = "-"            # risk table: no intervention recorded yet
 GRADES_H = 250             # exams page: grades chart and the table beside it
 
 
@@ -153,6 +155,7 @@ def faculty(d):
             "Fandan yiqilish": "{:.1%}", "Xavf ostida": "{:.1%}", "Salomatlik bali": "{:.0f}"}),
         hide_index=True, width="stretch")
     st.caption("Yorqinroq rang - yuqoriroq yiqilish yoki xavf ulushi.")
+    ui.export_buttons(table, f"fakultetlar_{st.session_state.semester_label.replace(' ', '_')}", "faculty")
     weak = fs.sort_values("HighRiskShare", ascending=False).iloc[0]
     st.markdown(f"**Eng ko'p e'tibor talab qiladigan fakultet:** {weak.FacultyName} - xavf ostidagilar "
                 f"{ui.pct(weak.HighRiskShare)}, o'rtacha GPA {weak.AvgGPA:.2f}, "
@@ -335,6 +338,55 @@ def exams(d):
 
 
 # --------------------------------------------------------------------- 4. risk
+def _model_trust(d):
+    """One plain sentence on how reliable the list is, from the model's test semester."""
+    mm = d["model_metrics"]
+    test = mm[(mm.Split == "test") & (mm.Rule == "recall target")].sort_values("IsBest", ascending=False)
+    if not len(test):
+        return
+    best = test.iloc[0]
+    right, found = round(best.Precision * 10), round(best.Recall * 10)
+    ui.callout("Ro'yxatga ishonch", (
+        f"Model xavf ehtimoli {best.Threshold:.0%} va undan yuqori talabalarni belgilaydi. Sinov semestrida "
+        f"belgilangan har 10 talabadan taxminan <b>{right} nafari</b> haqiqatan xavf ostida bo'lgan, "
+        f"{10 - right} nafari esa bekorga belgilangan. Xavf ostidagi har 10 talabadan <b>{found} nafari</b> "
+        f"ro'yxatga tushgan, {10 - found} nafari o'tkazib yuborilgan. Daraja qancha yuqori bo'lsa, "
+        "bashorat shuncha ishonchli: ro'yxat - suhbat uchun asos, hukm emas."))
+
+
+def _interventions(d, row, user):
+    """What has been done for the selected student, and a form to record more."""
+    st.markdown("**Ko'rilgan choralar**")
+    engine, key = ui.engine(), int(row.StudentKey)
+    done = iv.for_student(engine, key)
+    if len(done):
+        shown = done.assign(Outcome=done.Outcome.fillna("")).set_index("InterventionID")
+        edited = st.data_editor(
+            shown, hide_index=True, width="stretch", key=f"iv_edit_{key}",
+            disabled=["CreatedAt", "Type", "Note", "CreatedBy"],
+            column_config={
+                "CreatedAt": st.column_config.DatetimeColumn("Sana", format="DD.MM.YYYY HH:mm"),
+                "Type": "Chora",
+                "Status": st.column_config.SelectboxColumn("Holat", options=iv.STATUSES, required=True),
+                "Outcome": st.column_config.SelectboxColumn("Natija", options=[""] + iv.OUTCOMES),
+                "Note": "Izoh", "CreatedBy": "Kim yozgan"})
+        changed = edited[(edited.Status != shown.Status) | (edited.Outcome.fillna("") != shown.Outcome)]
+        if len(changed):
+            for iid, r in changed.iterrows():
+                iv.update(engine, int(iid), r.Status, r.Outcome or None, user)
+            st.rerun()
+        st.caption("Holat va natijani jadvalning o'zida o'zgartirish mumkin - u darhol saqlanadi.")
+    else:
+        st.caption("Bu talaba uchun hali chora qayd etilmagan.")
+    with st.form(f"iv_add_{key}", border=False, clear_on_submit=True):
+        c1, c2, c3 = st.columns([2, 4, 1], vertical_alignment="bottom")
+        kind = c1.selectbox("Yangi chora", iv.TYPES)
+        note = c2.text_input("Izoh", max_chars=1000, placeholder="Masalan: kurator bilan suhbat, 12-oktabr")
+        if c3.form_submit_button("Qo'shish", type="primary", width="stretch"):
+            iv.add(engine, key, int(d["latest"]), kind, note, user)
+            st.rerun()
+
+
 def risk(d):
     ui.header("Xavf ostidagi talabalar", "Keyingi semestr uchun bashorat va uning sabablari")
     st.caption("Model har bir faol talaba uchun keyingi semestrda akademik xavf ehtimolini baholaydi: "
@@ -348,6 +400,7 @@ def risk(d):
     c = st.columns(4)
     for i, level in enumerate(config.RISK_ORDER):
         ui.kpi(c[i], f"{level} xavf", ui.num(counts[level]), help=f"Ulush: {ui.pct(counts[level] / len(t))}")
+    _model_trust(d)
 
     if not allowed:
         by_fac = t.assign(High=t.RiskLevel.isin(m.HIGH_RISK)).groupby(
@@ -359,7 +412,12 @@ def risk(d):
     levels = c1.multiselect("Xavf darajasi", config.RISK_ORDER, default=["Kritik", "Yuqori"])
     facs = c2.multiselect("Fakultet", sorted(t.FacultyName.unique()))
     query = c3.text_input("Qidirish (ism, guruh yoki ID)", placeholder="Masalan: Karimov, IQ-23-04")
+    status = iv.latest_by_student(ui.engine()).set_index("StudentKey").Status
+    t = t.assign(Chora=t.StudentKey.map(status).fillna(NO_ACTION))
+    untouched = st.toggle("Faqat hali chora ko'rilmagan talabalar", key="risk_untouched")
     view = t[t.RiskLevel.isin(levels or config.RISK_ORDER)]
+    if untouched:
+        view = view[view.Chora == NO_ACTION]
     if facs:
         view = view[view.FacultyName.isin(facs)]
     if query.strip():
@@ -370,14 +428,18 @@ def risk(d):
     view = view.head(500)
     cols = {"StudentKey": "ID", "FullName": "Talaba", "GroupName": "Guruh", "FacultyName": "Fakultet",
             "RiskProbability": "Xavf ehtimoli", "RiskLevel": "Daraja", "SemGPA": "GPA",
-            "AttendanceRate": "Davomat", "FailedCourses": "Yiqilgan fanlar", "MainFactors": "Asosiy omillar"}
+            "AttendanceRate": "Davomat", "FailedCourses": "Yiqilgan fanlar", "Chora": "Chora",
+            "MainFactors": "Asosiy omillar"}
     shown = view[list(cols)].rename(columns=cols)
     event = st.dataframe(
         ui.shade(shown, [], {"Xavf ehtimoli": "{:.0%}", "GPA": "{:.2f}", "Davomat": "{:.0%}"},
                  tag="Daraja"),
         hide_index=True, width="stretch", height=300, on_select="rerun",
         selection_mode="single-row", key="risk_table")
-    st.caption(f"{len(view):,} ta talaba. Tafsilotni ko'rish uchun qatorni tanlang.")
+    st.caption(f"{len(view):,} ta talaba, shundan {int((view.Chora != NO_ACTION).sum()):,} tasi uchun chora "
+               "qayd etilgan. Tafsilotni ko'rish uchun qatorni tanlang.")
+    ui.export_buttons(shown, f"xavf_ostidagi_talabalar_{st.session_state.semester_label.replace(' ', '_')}",
+                      "risk")
     rows = event.selection.rows if event and event.selection else []
     if not len(view):
         return ui.synthetic_note()
@@ -417,6 +479,7 @@ def risk(d):
             "Admitted": "Yakuniyga qo'yilgan"}), hide_index=True, width="stretch")
         st.caption("Omillar ulushi: omil qiymatlari xavf ostida bo'lmagan tipik talaba qiymatlari bilan "
                    "almashtirilganda model bashorati qanchaga kamayishi. Ehtimollik - baho, kafolat emas.")
+        _interventions(d, row, st.session_state.auth_user)
 
     mm = d["model_metrics"]
     if len(mm):

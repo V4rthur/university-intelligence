@@ -35,7 +35,7 @@ o'zgarmaydi - universitet tizimidan (masalan HEMIS) olingan eksport fayllari shu
 | Umumiy ko'rinish | Hozir nima bo'lyapti va nimaga e'tibor berish kerak? |
 | Fakultetlar | Qaysi fakultet yaxshi, qaysi birida muammo bor? |
 | Imtihon natijalari | Oraliq va yakuniy nazorat qanday o'tdi, kimlar qo'yilmadi, qayerda pasayish bor? |
-| Xavf ostidagi talabalar | Kimga yordam kerak va nima uchun? |
+| Xavf ostidagi talabalar | Kimga yordam kerak, nima uchun, va u uchun nima qilindi (choralar qaydi)? |
 | «Agar...» ssenariylari | Qaror qabul qilsak, natija qanday o'zgaradi? |
 | AI yordamchi | Savolni oddiy tilda berish |
 | Boshqa | Moliya, o'qituvchilar, ma'lumotlar sifati va yangilash |
@@ -76,13 +76,31 @@ python -m venv .venv
 Oxirgi buyruq o'rniga `start_dashboard.bat` faylini ikki marta bosish ham mumkin.
 Dashboard manzili: http://localhost:8610
 
-Dashboard qulflangan ekran bilan ochiladi: login va parol so'raladi. Hisob
-`.streamlit/secrets.toml` faylida saqlanadi (parolning o'zi emas, faqat tuzlangan xeshi).
-Login yoki parolni o'zgartirish:
+### Kirish va rollar
+
+Dashboard qulflangan ekran bilan ochiladi: login va parol so'raladi. Har bir hisobning roli bor,
+va foydalanuvchi nimani ko'rishini shu rol belgilaydi (rolni dashboard ichida almashtirib bo'lmaydi):
+
+| Rol | Nimani ko'radi |
+|---|---|
+| `rahbariyat` | Hamma narsa: barcha fakultetlar, talabalar ro'yxati, konveyerni ishga tushirish, erkin SQL |
+| `dekan` | Faqat hisobga biriktirilgan fakultet va uning talabalari |
+| `oqituvchi` | Faqat umumlashtirilgan ko'rsatkichlar, talabalar ismisiz |
 
 ```bash
-.venv\Scripts\python 08_Dashboard\set_password.py
+.venv\Scripts\python 08_Dashboard\set_password.py            # hisob yaratish yoki parol/rolni o'zgartirish
+.venv\Scripts\python 08_Dashboard\set_password.py --list     # hisoblar ro'yxati
+.venv\Scripts\python 08_Dashboard\set_password.py --delete LOGIN
 ```
+
+Hisoblar `.streamlit/secrets.toml` faylida saqlanadi (parolning o'zi emas, faqat tuzlangan xeshi);
+bu fayl git'ga kirmaydi. Kirgandan so'ng sahifani yangilash tizimdan chiqarmaydi: brauzerda 12 soat
+amal qiladigan imzolangan sessiya saqlanadi (parol o'zgarsa yoki «Chiqish» bosilsa, u bekor bo'ladi).
+Yorug'/tungi rejim tugmasi faqat shu brauzer uchun amal qiladi.
+
+Xavf ostidagi talaba uchun ko'rilgan choralar (suhbat, tyutorlik, ...) va ularning natijasi
+`app.Intervention` jadvaliga yoziladi. Bu - fayllardan qayta tiklab bo'lmaydigan yagona ma'lumot,
+shuning uchun `--rebuild` uni avval faylga saqlab, qayta qurilgach tiklaydi.
 
 SQL Server boshqa nomda bo'lsa: `UIS_SQL_SERVER` muhit o'zgaruvchisini o'rnating
 (masalan `localhost\SQLEXPRESS`).
@@ -122,16 +140,16 @@ qayta ishga tushirish dublikat yaratmaydi. Dashboard yangi versiyani 30 soniya i
 |---|---|
 | `01_Data` | Sintetik ma'lumot generatori, o'zbekcha ma'lumotnomalar, `raw/` xom fayllar |
 | `02_ETL` | ETL konveyeri: extract → clean → validate → stage → merge → test |
-| `03_SQL` | Sxemalar, ETL nazorat jadvallari, staging jadvallari |
+| `03_SQL` | Sxemalar, ETL nazorat jadvallari, staging jadvallari, AI agent uchun faqat-o'qish foydalanuvchisi, choralar jadvali |
 | `04_Data_Warehouse` | Yulduz sxemasi: o'lchovlar, faktlar, yuklash protseduralari |
-| `05_Analytics` | Barcha KPI, salomatlik bali, alert va anomaliyalarning yagona ta'rifi |
+| `05_Analytics` | Barcha KPI, salomatlik bali, alert va anomaliyalarning yagona ta'rifi; choralar qaydi |
 | `06_ML` | Xavf modeli: o'qitish, baholash, tushuntirish, talabalarni baholash |
 | `07_AI_Agent` | AI agent va uning 9 ta vositasi, rolga asoslangan cheklovlar |
 | `08_Dashboard` | Streamlit dashboard (7 sahifa) |
 | `09_Simulation` | «Agar...» ssenariylari |
 | `10_Documentation` | Hujjatlar, yo'l xaritasi, demo ssenariysi, AI hisobotlari |
 | `11_Presentation` | Taqdimot (PowerPoint) va uni yaratuvchi skript |
-| `tests` | Vositalar, rol cheklovlari, SQL himoyasi va ssenariylar testi |
+| `tests` | KPI hisob-kitoblari, hisoblar va sessiya, SQL himoyasi (unit testlar); agent vositalari (smoke test) |
 
 `config.py` - ulanish, baholash shkalasi, xavf ta'rifi, alert chegaralari va salomatlik bali
 vaznlari bitta joyda.
@@ -139,8 +157,17 @@ vaznlari bitta joyda.
 ## Tekshirish
 
 ```bash
-.venv\Scripts\python tests\smoke_agent.py
+.venv\Scripts\python -m unittest discover tests     # 54 ta unit test, bir necha soniya
+.venv\Scripts\python tests\smoke_agent.py           # AI agent vositalari, jonli ombor bilan
 ```
+
+Unit testlar salomatlik bali, imtihon ko'rsatkichlari, xavf darajalari, hisoblar/rollar va sessiya
+tokenini qo'lda tuzilgan ma'lumotda tekshiradi; beshtasi jonli omborda ishlaydi va SQL Server
+bo'lmasa o'tkazib yuboriladi.
+
+AI yordamchining erkin SQL vositasi ikki qavat himoyalangan: matn filtri (faqat bitta `SELECT`) va
+ma'lumotlar bazasining o'zi - so'rov faqat o'qish huquqiga ega `uis_agent_reader` foydalanuvchisi
+nomidan bajariladi (`03_SQL/03_agent_reader.sql`).
 
 ETL har ishga tushganda o'z testlarini bajaradi (dublikat kalitlar, yetim yozuvlar, ball
 oraliqlari, to'lov balansi) va natijani `etl.RunLog` jadvaliga yozadi.

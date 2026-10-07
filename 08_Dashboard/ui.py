@@ -1,5 +1,6 @@
 """Shared dashboard helpers: cached data access, colours, chart styling, formats."""
 import base64
+import io
 import json
 import random
 import sys
@@ -626,6 +627,27 @@ def alert_box(level: str, text: str):
         f'<div class="ui-alert"><span class="tag"><span class="dot" style="background:{color};'
         f'color:{color}"></span>{label}</span><span class="msg">{text}</span></div>',
         unsafe_allow_html=True)
+
+
+def callout(label: str, text: str, color: str | None = None):
+    """A note in the alert style with its own label, e.g. how far to trust a list."""
+    color = color or P.BLUE
+    st.markdown(
+        f'<div class="ui-alert"><span class="tag"><span class="dot" style="background:{color};'
+        f'color:{color}"></span>{label}</span><span class="msg">{text}</span></div>',
+        unsafe_allow_html=True)
+
+
+def export_buttons(df: pd.DataFrame, name: str, key: str):
+    """Download the table on screen as CSV (opens in Excel with the right letters) or .xlsx."""
+    book = io.BytesIO()
+    df.to_excel(book, index=False, sheet_name="Ma'lumot")
+    left, right, _ = st.columns([1, 1, 3])
+    left.download_button("CSV yuklab olish", df.to_csv(index=False).encode("utf-8-sig"), f"{name}.csv",
+                         "text/csv", icon=":material/download:", key=f"{key}_csv", width="stretch")
+    right.download_button("Excel yuklab olish", book.getvalue(), f"{name}.xlsx",
+                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                          icon=":material/table_view:", key=f"{key}_xlsx", width="stretch")
 
 
 def synthetic_note():

@@ -1,7 +1,7 @@
 # Exact versions the project was built and tested with (Python 3.12+).
 # To upgrade: change a pin, reinstall, then run  python -m unittest discover tests
-# and open the dashboard - the light/dark switch in 08_Dashboard/ui.py relies on
-# an internal Streamlit setting, so check it after any Streamlit upgrade.
+# and open the dashboard - the light/dark switch in 08_Dashboard/ui.py writes the
+# browser entry Streamlit keeps its theme choice in, so check it after a Streamlit upgrade.
 pandas==3.0.6
 numpy==2.5.3
 scikit-learn==1.9.1

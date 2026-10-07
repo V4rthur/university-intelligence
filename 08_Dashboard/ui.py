@@ -1,7 +1,9 @@
 """Shared dashboard helpers: cached data access, colours, chart styling, formats."""
 import base64
+import json
 import random
 import sys
+import threading
 from functools import lru_cache
 from pathlib import Path
 from string import Template
@@ -9,7 +11,6 @@ from string import Template
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from streamlit import config as st_config
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config  # noqa: E402
@@ -67,20 +68,9 @@ THEMES = {
         orb="radial-gradient(circle at 50% 0%, #8fbcff 0%, #b9d4ff 16%, #dbe8ff 38%, rgba(255,255,255,0) 60%)",
         orb_glow="0 0 70px 6px rgba(70, 140, 255, 0.28), inset 0 10px 34px rgba(255, 255, 255, 0.8)"),
 }
-# The matching Streamlit theme (inputs, tables, menus), set at run time by set_theme().
-STREAMLIT_THEME = {
-    "dark": {"base": "dark", "primaryColor": "#4f8cff", "backgroundColor": "#070b1a",
-             "secondaryBackgroundColor": "#111a36", "textColor": "#eef2ff", "borderColor": "#26335c",
-             "sidebar.backgroundColor": "#080d20", "sidebar.secondaryBackgroundColor": "#111a36",
-             "sidebar.textColor": "#eef2ff", "sidebar.borderColor": "#26335c",
-             "sidebar.primaryColor": "#4f8cff"},
-    "light": {"base": "light", "primaryColor": "#2f6fed", "backgroundColor": "#eef2fb",
-              "secondaryBackgroundColor": "#e2e9f8", "textColor": "#0d1736", "borderColor": "#c5d0ea",
-              "sidebar.backgroundColor": "#e8eefb", "sidebar.secondaryBackgroundColor": "#d9e2f6",
-              "sidebar.textColor": "#0d1736", "sidebar.borderColor": "#c5d0ea",
-              "sidebar.primaryColor": "#2f6fed"},
-}
-THEME_FILE = config.ROOT / ".streamlit" / "ui_theme.txt"     # remembers the choice across restarts
+# The matching Streamlit theme (inputs, tables, menus) is in .streamlit/config.toml:
+# [theme.dark] and [theme.light]. The browser decides which of the two it shows.
+PAGES = ("overview", "faculty", "exams", "risk", "scenarios", "agent", "more")   # url paths
 ALERT_ROW, ALERT_GAP = 76, 8      # px: one alert row with its gap (.ui-alert), for charts set beside a list
 # Century Gothic everywhere (it ships with Windows/Office). Questrial is the closest
 # web font and is loaded only as a fallback for machines without Century Gothic.
@@ -127,8 +117,8 @@ button, h1, h2, h3, h4, td, th { font-family: $font; }
 /* segmented controls are as tall as the dropdowns and inputs they sit beside */
 [data-testid="stButtonGroup"] button[data-variant="segmented_control"] { min-height: 40px; }
 /* A block that only carries a stylesheet must not take a row (and its gap) in the layout. */
-[data-testid="stElementContainer"]:has([data-testid="stMarkdownContainer"] > style:only-child) {
-  display: none; }
+[data-testid="stElementContainer"]:has([data-testid="stMarkdownContainer"] > style:only-child),
+[data-testid="stElementContainer"]:has([data-testid="stHtml"]) { display: none; }   /* run_js() */
 
 @keyframes ui-drift { to { transform: translate3d(-620px, 620px, 0); } }
 @keyframes ui-drift-near { to { transform: translate3d(940px, 940px, 0); } }
@@ -306,59 +296,83 @@ button[kind="secondary"]:hover, [data-testid="stDownloadButton"] button:hover {
 _STARS = dict(stars_far=_stars(46, 620, 7), stars_near=_stars(18, 940, 21, size=(1.0, 1.9)))
 
 
-def apply_theme(name: str):
-    """Make `name` the active palette: module constants and the stylesheet."""
-    global THEME, CSS, SERIES, RISK_COLORS, STATUS, GRADE_COLORS, ALERT_STYLE
-    THEME, p = name, THEMES[name]
-    globals().update({k: v for k, v in p.items() if k.isupper()})
-    SERIES = [BLUE, CYAN, VIOLET, AMBER]
+def _palette(name: str) -> dict:
+    """Every colour constant of one theme, the derived ones and its stylesheet."""
+    t = THEMES[name]
+    p = {k: v for k, v in t.items() if k.isupper()}
+    p["THEME"] = name
+    p["SERIES"] = [p["BLUE"], p["CYAN"], p["VIOLET"], p["AMBER"]]
     # Risk levels are ordered: a calm blue ramp that turns amber, then red.
-    RISK_COLORS = dict(zip(config.RISK_ORDER, [RISK_LOW, BLUE, AMBER, RED]))
-    STATUS = {"good": CYAN, "warning": AMBER, "serious": "#ff8a5c", "critical": RED}
-    GRADE_COLORS = [CYAN, BLUE, GRADE_MID, RED]      # 5, 4, 3, 2
-    ALERT_STYLE = {  # level -> (label, marker colour)
-        "critical": ("Kritik", RED), "warning": ("Ogohlantirish", AMBER),
-        "attention": ("E'tibor", BLUE), "positive": ("Ijobiy", CYAN)}
-    CSS = _CSS.substitute(
-        font=FONT, display=DISPLAY, bg=BG, panel=PANEL, ink=INK, ink2=INK2, muted=MUTED, line=LINE,
-        blue=BLUE, cyan=CYAN, **_STARS, **{k: v for k, v in p.items() if k.islower()})
+    p["RISK_COLORS"] = dict(zip(config.RISK_ORDER, [p["RISK_LOW"], p["BLUE"], p["AMBER"], p["RED"]]))
+    p["STATUS"] = {"good": p["CYAN"], "warning": p["AMBER"], "serious": "#ff8a5c", "critical": p["RED"]}
+    p["GRADE_COLORS"] = [p["CYAN"], p["BLUE"], p["GRADE_MID"], p["RED"]]      # 5, 4, 3, 2
+    p["ALERT_STYLE"] = {  # level -> (label, marker colour)
+        "critical": ("Kritik", p["RED"]), "warning": ("Ogohlantirish", p["AMBER"]),
+        "attention": ("E'tibor", p["BLUE"]), "positive": ("Ijobiy", p["CYAN"])}
+    p["CSS"] = _CSS.substitute(
+        font=FONT, display=DISPLAY, bg=p["BG"], panel=p["PANEL"], ink=p["INK"], ink2=p["INK2"],
+        muted=p["MUTED"], line=p["LINE"], blue=p["BLUE"], cyan=p["CYAN"], **_STARS,
+        **{k: v for k, v in t.items() if k.islower()})
+    return p
+
+
+# Two people can have the dashboard open in different themes at the same time, so the
+# active theme belongs to the script run (one thread each), not to the module.
+_PALETTES = {name: _palette(name) for name in THEMES}
+_run = threading.local()
+
+
+class _Active:
+    """P.INK, P.BLUE, ... - the constants of the theme of the current run."""
+    def __getattr__(self, name):
+        try:
+            return _PALETTES[getattr(_run, "theme", "dark")][name]
+        except KeyError:
+            raise AttributeError(name) from None
+
+
+P = _Active()
+
+
+def __getattr__(name):           # ui.INK, ui.SERIES, ... from the pages resolve the same way
+    return getattr(P, name)
+
+
+def apply_theme(name: str):
+    """Make `name` the theme of this script run."""
+    _run.theme = name
 
 
 def current_theme() -> str:
-    return "light" if st_config.get_option("theme.base") == "light" else "dark"
+    """The theme this browser is showing (Streamlit reports it with every run)."""
+    shown = st.context.theme.type
+    return shown if shown in THEMES else "dark"
 
 
-def set_theme(name: str):
-    """Switch the whole app (every open session) to the light or dark theme.
-
-    Streamlit themes its own widgets from server config, and the public
-    st.set_option refuses theme options, so the internal setter is used; the
-    browser picks the new theme up on the next rerun."""
-    for option, value in STREAMLIT_THEME[name].items():
-        st_config.set_option(f"theme.{option}", value)
-    THEME_FILE.write_text(name, encoding="utf-8")
+def run_js(code: str):
+    """Run a snippet in the page (cookies, theme choice): things only the browser can do."""
+    st.html(f"<script>{code}</script>", unsafe_allow_javascript=True)
 
 
 def theme_button(key: str = "theme_toggle"):
-    """The light/dark switch."""
-    dark = THEME == "dark"
+    """The light/dark switch, for this browser only.
+
+    Streamlit keeps the choice in the browser's localStorage (one entry per page
+    address) and reads it when the page loads, so the switch writes it there and
+    reloads; the signed session cookie (auth.py) keeps the user logged in."""
+    dark = P.THEME == "dark"
     if st.button("Yorug' rejim" if dark else "Tungi rejim", key=key, width="stretch",
                  icon=":material/light_mode:" if dark else ":material/dark_mode:"):
-        set_theme("light" if dark else "dark")
-        st.rerun()
-
-
-if THEME_FILE.exists() and THEME_FILE.read_text(encoding="utf-8").strip() == "light" \
-        and current_theme() != "light":
-    set_theme("light")                       # once per server start: restore the saved choice
-# Streamlit draws its own widgets and the table canvas in the theme font, so it is set
-# here as well (the server may have started before config.toml named this font).
-st_config.set_option("theme.font", "'Century Gothic', Questrial, sans-serif")
-apply_theme(current_theme())
+        paths = json.dumps(["/"] + [f"/{p}" for p in PAGES])
+        run_js(f"""
+            const choice = JSON.stringify("{'Light' if dark else 'Dark'}");
+            const paths = new Set({paths}.concat([window.location.pathname]));
+            for (const p of paths) window.localStorage.setItem(`stActiveTheme-${{p}}-v2`, choice);
+            window.location.reload();""")
 
 
 def inject_css():
-    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(P.CSS, unsafe_allow_html=True)
 
 
 @lru_cache(maxsize=None)
@@ -405,7 +419,7 @@ def watch_for_new_data():
 
 def faculty_color(d: dict) -> dict:
     """Bars are labelled on the axis, so every faculty is drawn in the same colour."""
-    return {int(k): BLUE for k in d["faculties"].FacultyKey}
+    return {int(k): P.BLUE for k in d["faculties"].FacultyKey}
 
 
 # ------------------------------------------------------------------ formats
@@ -431,7 +445,7 @@ def kpi(col, label, value, delta=None, inverse=False, help=None):
         down = delta.startswith("-") and not zero
         bad = (not zero) and (down != inverse)
         arrow = "" if zero else ("&#9660; " if down else "&#9650; ")
-        change = (f'<div class="chg" style="color:{MUTED if zero else RED if bad else CYAN}">'
+        change = (f'<div class="chg" style="color:{P.MUTED if zero else P.RED if bad else P.CYAN}">'
                   f'{arrow}{delta.lstrip("+-")}</div>')
     tip = f' title="{help}"' if help else ""
     mark = ' <span class="q">i</span>' if help else ""
@@ -448,17 +462,17 @@ def pp(cur, prev):
 def style(fig: go.Figure, height=300, pct_axis=None, legend=True, title=None) -> go.Figure:
     fig.update_layout(
         height=height, margin=dict(l=18, r=18, t=(52 if title else 18) + (28 if legend else 0), b=14),
-        title=dict(text=title, font=dict(size=13, color=INK), x=0, xanchor="left", pad=dict(l=18, t=16),
+        title=dict(text=title, font=dict(size=13, color=P.INK), x=0, xanchor="left", pad=dict(l=18, t=16),
                    y=1, yanchor="top") if title else None,
-        font=dict(family=FONT, size=13, color=INK2), paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=FONT, size=13, color=P.INK2), paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)", showlegend=legend,
-        legend=dict(orientation="h", y=1.02, yanchor="bottom", x=0, font=dict(size=11, color=INK2)),
-        hoverlabel=dict(font=dict(family=FONT, size=12, color=INK), bgcolor=HOVER_BG,
+        legend=dict(orientation="h", y=1.02, yanchor="bottom", x=0, font=dict(size=11, color=P.INK2)),
+        hoverlabel=dict(font=dict(family=FONT, size=12, color=P.INK), bgcolor=P.HOVER_BG,
                         bordercolor="rgba(120,170,255,0.5)"), bargap=0.42)
-    fig.update_xaxes(showgrid=False, linecolor=AXIS, linewidth=1, ticks="",
-                     tickfont=dict(color=MUTED), title=None)
-    fig.update_yaxes(gridcolor=GRID, zeroline=False, linecolor="rgba(0,0,0,0)",
-                     tickfont=dict(color=MUTED), title=None)
+    fig.update_xaxes(showgrid=False, linecolor=P.AXIS, linewidth=1, ticks="",
+                     tickfont=dict(color=P.MUTED), title=None)
+    fig.update_yaxes(gridcolor=P.GRID, zeroline=False, linecolor="rgba(0,0,0,0)",
+                     tickfont=dict(color=P.MUTED), title=None)
     if pct_axis == "y":
         fig.update_yaxes(tickformat=".0%")
     elif pct_axis == "x":
@@ -478,14 +492,14 @@ def glow_line(fig: go.Figure, x, y, name, color, fmt, width=3, marker=7, unified
     lead = "" if unified else "%{x}<br>"
     fig.add_scatter(x=x, y=y, name=name, mode="lines+markers",
                     line=dict(color=color, width=width, **curve),
-                    marker=dict(size=marker, color=BG, line=dict(color=color, width=2)),
+                    marker=dict(size=marker, color=P.BG, line=dict(color=color, width=2)),
                     hovertemplate=f"{lead}{name + ': ' if unified else ''}%{{y:{fmt}}}<extra></extra>")
 
 
 def line(df, x, y, title=None, percent=False, height=280, name=None):
     """Single-series trend line (the title names the series, so no legend)."""
     fig = go.Figure()
-    glow_line(fig, df[x], df[y], name or title or y, BLUE, ".1%" if percent else ".2f")
+    glow_line(fig, df[x], df[y], name or title or y, P.BLUE, ".1%" if percent else ".2f")
     return style(fig, height, "y" if percent else None, legend=False, title=title)
 
 
@@ -500,15 +514,15 @@ def faculty_lines(df, d, y, title=None, percent=False, height=340, highlight=Non
         sub = df[df.FacultyKey == fk].sort_values("SemesterKey")
         if int(fk) != highlight:
             fig.add_scatter(x=sub.SemesterLabel, y=sub[y], name=name, mode="lines+markers",
-                            line=dict(color=DIM, width=1.5, shape="spline", smoothing=0.6),
+                            line=dict(color=P.DIM, width=1.5, shape="spline", smoothing=0.6),
                             marker=dict(size=4),
                             hovertemplate=f"{name}: %{{y:{fmt}}}<extra></extra>")
             continue
-        glow_line(fig, sub.SemesterLabel, sub[y], name, CYAN, fmt, unified=True)
+        glow_line(fig, sub.SemesterLabel, sub[y], name, P.CYAN, fmt, unified=True)
         if len(sub):
             fig.add_annotation(x=sub.SemesterLabel.iloc[-1], y=sub[y].iloc[-1], text=f"<b>{name}</b>",
                                showarrow=False, xanchor="right", yshift=16,
-                               font=dict(color=CYAN, size=12, family=FONT))
+                               font=dict(color=P.CYAN, size=12, family=FONT))
     fig.update_layout(hovermode="x unified")
     return style(fig, height, "y" if percent else None, legend=False, title=title)
 
@@ -524,14 +538,14 @@ def bar_h(df, value, label, title=None, percent=False, colors=None, height=None,
     fmt = ".1%" if percent else ",.2f"
     fig = go.Figure(go.Bar(
         x=df[value], y=df[label], orientation="h",
-        marker=dict(color=colors[::-1] if colors is not None else BLUE, cornerradius=6),
+        marker=dict(color=colors[::-1] if colors is not None else P.BLUE, cornerradius=6),
         text=[f"{v:{fmt}}" for v in df[value]] if text else None, textposition="outside",
-        textfont=dict(color=INK2, size=11), cliponaxis=False,
+        textfont=dict(color=P.INK2, size=11), cliponaxis=False,
         hovertemplate=f"%{{y}}<br>%{{x:{fmt}}}<extra></extra>"))
     fig = style(fig, height or bar_h_height(df), "x" if percent else None,
                 legend=False, title=title)
-    fig.update_yaxes(showgrid=False, tickfont=dict(color=INK2))
-    fig.update_xaxes(showgrid=True, gridcolor=GRID, showticklabels=False)
+    fig.update_yaxes(showgrid=False, tickfont=dict(color=P.INK2))
+    fig.update_xaxes(showgrid=True, gridcolor=P.GRID, showticklabels=False)
     fig.update_layout(margin=dict(r=64))
     return fig
 
@@ -539,9 +553,9 @@ def bar_h(df, value, label, title=None, percent=False, colors=None, height=None,
 def bar_v(df, x, y, title=None, percent=False, colors=None, height=280):
     fmt = ".1%" if percent else ",.0f"
     fig = go.Figure(go.Bar(
-        x=df[x], y=df[y], marker=dict(color=colors if colors is not None else BLUE, cornerradius=8),
+        x=df[x], y=df[y], marker=dict(color=colors if colors is not None else P.BLUE, cornerradius=8),
         text=[f"{v:{fmt}}" for v in df[y]], textposition="outside",
-        textfont=dict(color=INK2, size=11), cliponaxis=False,
+        textfont=dict(color=P.INK2, size=11), cliponaxis=False,
         hovertemplate=f"%{{x}}<br>%{{y:{fmt}}}<extra></extra>"))
     return style(fig, height, "y" if percent else None, legend=False, title=title)
 
@@ -560,15 +574,15 @@ def gauge(value: float, title: str, height=262):
     """One headline score on a 0-100 dial."""
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=value,
-        number=dict(font=dict(size=46, color=INK, family=FONT), valueformat=".0f"),
+        number=dict(font=dict(size=46, color=P.INK, family=FONT), valueformat=".0f"),
         gauge=dict(axis=dict(range=[0, 100], tickvals=[0, 25, 50, 75, 100],
-                             tickfont=dict(color=MUTED, size=11), tickcolor=AXIS),
-                   bar=dict(color=BLUE, thickness=0.78), bgcolor="rgba(255,255,255,0.08)",
+                             tickfont=dict(color=P.MUTED, size=11), tickcolor=P.AXIS),
+                   bar=dict(color=P.BLUE, thickness=0.78), bgcolor="rgba(255,255,255,0.08)",
                    borderwidth=0)))
     fig.update_layout(
         height=height, margin=dict(l=28, r=28, t=52, b=10), paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(family=FONT, color=INK2),
-        title=dict(text=title, font=dict(size=14, color=INK), x=0, xanchor="left",
+        font=dict(family=FONT, color=P.INK2),
+        title=dict(text=title, font=dict(size=14, color=P.INK), x=0, xanchor="left",
                    y=0.97, yanchor="top"))
     return fig
 
@@ -580,7 +594,7 @@ def season_lines(df, y, title=None, percent=False, height=300):
     show a seasonal zigzag; split by season, the year-to-year trend is visible.
     """
     fig, fmt = go.Figure(), ".1%" if percent else ".2f"
-    for season, color in zip(("Kuz", "Bahor"), SERIES):
+    for season, color in zip(("Kuz", "Bahor"), P.SERIES):
         sub = df[df.SemesterName == season].sort_values("SemesterKey")
         glow_line(fig, sub.AcademicYear, sub[y], f"{season} semestri", color, fmt, unified=True)
     fig.update_layout(hovermode="x unified")
@@ -602,12 +616,12 @@ def shade(df, heat: list[str], formats: dict, tag: str | None = None, rgb=(255, 
     if heat:
         styler = styler.apply(heat_col, subset=heat)
     if tag:
-        styler = styler.map(lambda v: f"{RISK_TAG.get(v, '')};font-weight:600", subset=[tag])
+        styler = styler.map(lambda v: f"{P.RISK_TAG.get(v, '')};font-weight:600", subset=[tag])
     return styler
 
 
 def alert_box(level: str, text: str):
-    label, color = ALERT_STYLE[level]
+    label, color = P.ALERT_STYLE[level]
     st.markdown(
         f'<div class="ui-alert"><span class="tag"><span class="dot" style="background:{color};'
         f'color:{color}"></span>{label}</span><span class="msg">{text}</span></div>',

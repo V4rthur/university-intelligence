@@ -1,23 +1,42 @@
-# Deep-space theme: navy night sky, glass panels, blue glow and one teal
-# accent. Layout, motion and chart rules are in 08_Dashboard/ui.py.
+# Deep-space theme in two variants. Streamlit shows the one the browser asks
+# for (its saved choice, otherwise the system light/dark setting); the switch
+# button in the dashboard changes that choice for this browser only.
+# Layout, motion and chart colours are in 08_Dashboard/ui.py.
 [theme]
-base = "dark"
-primaryColor = "#4f8cff"
-backgroundColor = "#070b1a"
-secondaryBackgroundColor = "#111a36"
-textColor = "#eef2ff"
-borderColor = "#26335c"
 baseRadius = "0.8rem"
 buttonRadius = "full"
 font = "'Century Gothic', Questrial, sans-serif"
 showWidgetBorder = true
 
-[theme.sidebar]
+# Dark: navy night sky, glass panels, blue glow and one teal accent.
+[theme.dark]
+primaryColor = "#4f8cff"
+backgroundColor = "#070b1a"
+secondaryBackgroundColor = "#111a36"
+textColor = "#eef2ff"
+borderColor = "#26335c"
+
+[theme.dark.sidebar]
 backgroundColor = "#080d20"
 secondaryBackgroundColor = "#111a36"
 textColor = "#eef2ff"
 borderColor = "#26335c"
 primaryColor = "#4f8cff"
+
+# Light: the same layout at daybreak - pale sky, white glass, navy type.
+[theme.light]
+primaryColor = "#2f6fed"
+backgroundColor = "#eef2fb"
+secondaryBackgroundColor = "#e2e9f8"
+textColor = "#0d1736"
+borderColor = "#c5d0ea"
+
+[theme.light.sidebar]
+backgroundColor = "#e8eefb"
+secondaryBackgroundColor = "#d9e2f6"
+textColor = "#0d1736"
+borderColor = "#c5d0ea"
+primaryColor = "#2f6fed"
 
 [client]
 toolbarMode = "minimal"

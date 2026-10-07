@@ -12,6 +12,7 @@ accounts with
 
     python 08_Dashboard/set_password.py
 """
+import base64
 import hashlib
 import hmac
 import json
@@ -111,6 +112,55 @@ def _sign_in(acc: dict):
     st.session_state.auth_user = acc["username"]
     st.session_state.role = acc["role"]
     st.session_state.own_faculty_name = acc.get("faculty") if acc["role"] == "dekan" else None
+
+
+# ------------------------------------------------------- staying signed in
+# Streamlit forgets the session on every page reload, so a signed token in a
+# cookie brings the user back in. It holds the login and an expiry time and is
+# signed with a key only this server has; the signature also covers the
+# password hash, so changing a password (or deleting the account) ends its
+# sessions. The role is not in the token: it is read from the account each time.
+COOKIE, INTRO_COOKIE, SESSION_HOURS = "uis_session", "uis_intro", 12
+
+
+def _session_key() -> bytes:
+    doc = _read()
+    key = doc.get("session", {}).get("key")
+    if not key:
+        key = secrets.token_hex(32)
+        doc.setdefault("session", {})["key"] = key
+        _write(doc)
+    return bytes.fromhex(key)
+
+
+def _signature(user: str, expires: int, acc: dict) -> str:
+    return hmac.new(_session_key(), f"{user}.{expires}.{acc['password_hash']}".encode(), "sha256").hexdigest()
+
+
+def session_token(acc: dict, hours: float = SESSION_HOURS) -> str:
+    user = base64.urlsafe_b64encode(acc["username"].encode("utf-8")).decode().rstrip("=")
+    expires = int(time.time() + hours * 3600)
+    return f"{user}.{expires}.{_signature(user, expires, acc)}"
+
+
+def account_from_token(token: str) -> dict | None:
+    """The account a session token was issued to, if it is genuine and not expired."""
+    try:
+        user, expires, signature = token.split(".")
+        if int(expires) < time.time():
+            return None
+        login = base64.urlsafe_b64decode(user + "=" * (-len(user) % 4)).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    acc = accounts().get(login.lower())
+    if acc and hmac.compare_digest(signature, _signature(user, int(expires), acc)):
+        return acc
+    return None
+
+
+def _set_cookie(name: str, value: str, seconds: int):
+    # the browser, not the server, has to store it: Streamlit cannot send cookies itself
+    ui.run_js(f'document.cookie = "{name}={value}; path=/; max-age={seconds}; SameSite=Strict";')
 
 
 # What differs between the two themes on the lock screen.
@@ -241,9 +291,14 @@ def _lock_css(intro: bool) -> str:
 
 
 def _lock_screen():
-    intro = not st.session_state.get("lock_seen")
+    # the intro plays once per visit: not again on a rerun, nor on a reload within half an hour
+    intro = not st.session_state.get("lock_seen") and INTRO_COOKIE not in st.context.cookies
     st.session_state.lock_seen = True
     st.markdown(_lock_css(intro), unsafe_allow_html=True)
+    if intro:
+        _set_cookie(INTRO_COOKIE, "1", 1800)
+    if st.session_state.get("signed_out"):
+        _set_cookie(COOKIE, "", 0)           # signing out also removes the session from the browser
     st.markdown(
         '<div class="lk-planet"></div><div class="lk-moon left"></div><div class="lk-moon right"></div>'
         '<div class="lk-stage"><div class="halo"></div><div class="ring"></div><div class="ring two"></div>'
@@ -270,6 +325,7 @@ def _lock_screen():
         acc = check(username, password)
         if acc:
             _sign_in(acc)
+            st.session_state.issue_cookie = True
             st.session_state.pop("auth_fails", None)
             st.rerun()
         time.sleep(0.6)                      # slow down guessing
@@ -284,10 +340,19 @@ def _lock_screen():
 
 
 def require_login():
-    """Show the lock screen and stop the script until the user has signed in."""
+    """Show the lock screen and stop the script until the user has signed in
+    (or comes back with a valid session cookie)."""
     if not st.session_state.get("auth_user"):
-        _lock_screen()
-        st.stop()
+        returning = None if st.session_state.get("signed_out") else \
+            account_from_token(st.context.cookies.get(COOKIE, ""))
+        if not returning:
+            _lock_screen()
+            st.stop()
+        _sign_in(returning)
+    if st.session_state.pop("issue_cookie", False):
+        acc = accounts().get(st.session_state.auth_user.lower())
+        if acc:
+            _set_cookie(COOKIE, session_token(acc), SESSION_HOURS * 3600)
 
 
 def sidebar_user(role_label: str):
@@ -300,4 +365,6 @@ def sidebar_user(role_label: str):
     if st.button("Chiqish", icon=":material/lock:", width="stretch"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
+        st.session_state.signed_out = True       # do not walk straight back in with the cookie
+        st.session_state.lock_seen = True
         st.rerun()

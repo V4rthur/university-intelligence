@@ -86,6 +86,79 @@ class Accounts(unittest.TestCase):
         self.assertIsNone(auth.check("a", "password-a"))
 
 
+class SessionTokens(unittest.TestCase):
+    def setUp(self):
+        self._dir = tempfile.TemporaryDirectory()
+        self._real, auth.SECRETS = auth.SECRETS, Path(self._dir.name) / "secrets.toml"
+        auth.write_account("rektor", "correct horse", "rahbariyat")
+        self.acc = auth.check("rektor", "correct horse")
+
+    def tearDown(self):
+        auth.SECRETS = self._real
+        self._dir.cleanup()
+
+    def test_a_fresh_token_brings_the_account_back(self):
+        self.assertEqual(auth.account_from_token(auth.session_token(self.acc))["username"], "rektor")
+
+    def test_expired_or_garbled_tokens_are_refused(self):
+        self.assertIsNone(auth.account_from_token(auth.session_token(self.acc, hours=-1)))
+        for bad in ["", "abc", "a.b.c", "..", auth.session_token(self.acc) + "0"]:
+            self.assertIsNone(auth.account_from_token(bad), bad)
+
+    def test_a_token_cannot_be_edited(self):
+        user, expires, signature = auth.session_token(self.acc).split(".")
+        self.assertIsNone(auth.account_from_token(f"{user}.{int(expires) + 99999}.{signature}"))
+        auth.write_account("dekan", "password1", "dekan", "Huquq")
+        other = auth.session_token(auth.check("dekan", "password1")).split(".")[0]
+        self.assertIsNone(auth.account_from_token(f"{other}.{expires}.{signature}"))
+
+    def test_changing_the_password_or_deleting_the_account_ends_the_session(self):
+        token = auth.session_token(self.acc)
+        auth.write_account("rektor", "another password", "rahbariyat")
+        self.assertIsNone(auth.account_from_token(token))
+        token = auth.session_token(auth.check("rektor", "another password"))
+        auth.delete_account("rektor")
+        self.assertIsNone(auth.account_from_token(token))
+
+    def test_the_role_comes_from_the_account_not_the_token(self):
+        token = auth.session_token(self.acc)
+        doc = auth._read()
+        doc["users"]["rektor"]["role"] = "oqituvchi"          # demoted, same password
+        auth._write(doc)
+        self.assertEqual(auth.account_from_token(token)["role"], "oqituvchi")
+
+    def test_a_token_signed_with_another_key_is_refused(self):
+        token = auth.session_token(self.acc)
+        doc = auth._read()
+        doc["session"]["key"] = "11" * 32
+        auth._write(doc)
+        self.assertIsNone(auth.account_from_token(token))
+
+
+class Themes(unittest.TestCase):
+    def test_both_themes_define_the_same_constants_and_a_full_stylesheet(self):
+        dark, light = ui._PALETTES["dark"], ui._PALETTES["light"]
+        self.assertEqual(set(dark), set(light))
+        for palette in (dark, light):
+            self.assertNotIn("$", palette["CSS"])                  # no unfilled placeholder
+            self.assertEqual(set(palette["RISK_COLORS"]), set(config.RISK_ORDER))
+            self.assertEqual(set(palette["RISK_TAG"]), set(config.RISK_ORDER))
+
+    def test_the_theme_belongs_to_the_run_not_to_the_module(self):
+        import threading
+        seen = {}
+
+        def run(name):
+            ui.apply_theme(name)
+            seen[name] = (ui.THEME, ui.INK, ui.P.BG)
+
+        threads = [threading.Thread(target=run, args=(name,)) for name in ("light", "dark")]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        for name in ("light", "dark"):
+            self.assertEqual(seen[name], (name, ui.THEMES[name]["INK"], ui.THEMES[name]["BG"]))
+
+
 class Formats(unittest.TestCase):
     def test_percent(self):
         self.assertEqual(ui.pct(0.9174), "91.7%")

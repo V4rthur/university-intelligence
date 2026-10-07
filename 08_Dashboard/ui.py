@@ -72,6 +72,7 @@ THEMES = {
 # The matching Streamlit theme (inputs, tables, menus) is in .streamlit/config.toml:
 # [theme.dark] and [theme.light]. The browser decides which of the two it shows.
 PAGES = ("overview", "faculty", "exams", "risk", "scenarios", "agent", "more")   # url paths
+SKIP_INTRO_COOKIE = "uis_skip_intro"     # set for a few seconds by the theme switch, see auth.py
 ALERT_ROW, ALERT_GAP = 76, 8      # px: one alert row with its gap (.ui-alert), for charts set beside a list
 # Century Gothic everywhere (it ships with Windows/Office). Questrial is the closest
 # web font and is loaded only as a fallback for machines without Century Gothic.
@@ -369,6 +370,7 @@ def theme_button(key: str = "theme_toggle"):
             const choice = JSON.stringify("{'Light' if dark else 'Dark'}");
             const paths = new Set({paths}.concat([window.location.pathname]));
             for (const p of paths) window.localStorage.setItem(`stActiveTheme-${{p}}-v2`, choice);
+            document.cookie = "{SKIP_INTRO_COOKIE}=1; path=/; max-age=15; SameSite=Strict";
             window.location.reload();""")
 
 

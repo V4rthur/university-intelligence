@@ -120,7 +120,7 @@ def _sign_in(acc: dict):
 # signed with a key only this server has; the signature also covers the
 # password hash, so changing a password (or deleting the account) ends its
 # sessions. The role is not in the token: it is read from the account each time.
-COOKIE, INTRO_COOKIE, SESSION_HOURS = "uis_session", "uis_intro", 12
+COOKIE, SESSION_HOURS = "uis_session", 12
 
 
 def _session_key() -> bytes:
@@ -291,12 +291,12 @@ def _lock_css(intro: bool) -> str:
 
 
 def _lock_screen():
-    # the intro plays once per visit: not again on a rerun, nor on a reload within half an hour
-    intro = not st.session_state.get("lock_seen") and INTRO_COOKIE not in st.context.cookies
+    # The intro plays every time the lock screen is opened afresh (a visit, a reload, after
+    # signing out), but not on a rerun (a wrong password) and not when the page has just
+    # reloaded itself because the theme was switched.
+    intro = not st.session_state.get("lock_seen") and ui.SKIP_INTRO_COOKIE not in st.context.cookies
     st.session_state.lock_seen = True
     st.markdown(_lock_css(intro), unsafe_allow_html=True)
-    if intro:
-        _set_cookie(INTRO_COOKIE, "1", 1800)
     if st.session_state.get("signed_out"):
         _set_cookie(COOKIE, "", 0)           # signing out also removes the session from the browser
     st.markdown(
@@ -366,5 +366,4 @@ def sidebar_user(role_label: str):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.session_state.signed_out = True       # do not walk straight back in with the cookie
-        st.session_state.lock_seen = True
         st.rerun()
